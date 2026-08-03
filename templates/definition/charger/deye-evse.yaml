@@ -83,8 +83,13 @@ params:
     advanced: true
 render: |
   type: custom
-  # vehicle state from the status word combined with the charge power:
-  # 0x01 = idle, 0x20 = vehicle connected, charging is derived from power > 0
+  # vehicle state from the status word combined with the charge power. The low
+  # seven bits carry the state, observed on a SUN-EVSE11K01:
+  #   bit 0 (0x01) no vehicle
+  #   bit 3 (0x08) vehicle connected, not charging (e.g. battery full)
+  #   bit 5 (0x20) vehicle connected, ready or charging
+  # charging is derived from the power, since the status word does not
+  # distinguish a connected from a charging vehicle
   status:
     source: go
     in:
@@ -112,7 +117,7 @@ render: |
             decode: uint16
     script: |
       res := "A"
-      if state & 0x7f == 0x20 {
+      if state & 0x28 != 0 {
         res = "B"
         if power > 0 {
           res = "C"
