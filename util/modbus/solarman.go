@@ -62,39 +62,42 @@ func solarmanCRC(buf []byte) uint16 {
 	return crc
 }
 
-// SolarmanClientHandler implements the Packager, Transporter and Connector
-// interfaces for Solarman data loggers.
-type SolarmanClientHandler struct {
+// solarmanTransport holds the single TCP connection to the logger. Loggers only
+// accept one connection at a time, so all handlers of a logger share it and
+// serialize their requests through its mutex.
+type solarmanTransport struct {
 	Address      string
 	Serial       uint32
 	Timeout      time.Duration
 	ConnectDelay time.Duration
 	Logger       gridx.Logger
 
-	mu      sync.Mutex
+	mu   sync.Mutex
+	seq  uint16
+	conn net.Conn
+}
+
+// SolarmanClientHandler implements the Packager, Transporter and Connector
+// interfaces for Solarman data loggers.
+type SolarmanClientHandler struct {
+	*solarmanTransport
 	slaveID byte
-	seq     uint16
-	conn    net.Conn
 }
 
 // NewSolarmanClientHandler creates a handler for the given logger.
 func NewSolarmanClientHandler(address string, serial uint32) *SolarmanClientHandler {
 	return &SolarmanClientHandler{
-		Address: util.DefaultPort(address, solarmanPort),
-		Serial:  serial,
-		Timeout: 10 * time.Second,
+		solarmanTransport: &solarmanTransport{
+			Address: util.DefaultPort(address, solarmanPort),
+			Serial:  serial,
+			Timeout: 10 * time.Second,
+		},
 	}
 }
 
-// Clone creates a handler for a different slave sharing the same settings.
+// Clone creates a handler for a different slave sharing the same connection.
 func (h *SolarmanClientHandler) Clone() *SolarmanClientHandler {
-	return &SolarmanClientHandler{
-		Address:      h.Address,
-		Serial:       h.Serial,
-		Timeout:      h.Timeout,
-		ConnectDelay: h.ConnectDelay,
-		Logger:       h.Logger,
-	}
+	return &SolarmanClientHandler{solarmanTransport: h.solarmanTransport}
 }
 
 // SetSlave implements the Packager interface.
@@ -159,7 +162,7 @@ func (h *SolarmanClientHandler) Verify(aduRequest, aduResponse []byte) error {
 }
 
 // wrap embeds an RTU frame in the Solarman envelope.
-func (h *SolarmanClientHandler) wrap(rtu []byte) []byte {
+func (h *solarmanTransport) wrap(rtu []byte) []byte {
 	payload := make([]byte, solarmanReqHeaderLen+len(rtu))
 	payload[0] = solarmanFrameType
 	// sensorType and the three timestamps stay zero for requests
@@ -182,7 +185,7 @@ func (h *SolarmanClientHandler) wrap(rtu []byte) []byte {
 }
 
 // unwrap extracts the RTU frame from a Solarman response.
-func (h *SolarmanClientHandler) unwrap(frame []byte) ([]byte, error) {
+func (h *solarmanTransport) unwrap(frame []byte) ([]byte, error) {
 	if len(frame) < solarmanEnvelopeLen {
 		return nil, fmt.Errorf("solarman: response too short: %d bytes", len(frame))
 	}
@@ -208,13 +211,13 @@ func (h *SolarmanClientHandler) unwrap(frame []byte) ([]byte, error) {
 }
 
 // Connect implements the Connector interface.
-func (h *SolarmanClientHandler) Connect() error {
+func (h *solarmanTransport) Connect() error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.connect()
 }
 
-func (h *SolarmanClientHandler) connect() error {
+func (h *solarmanTransport) connect() error {
 	if h.conn != nil {
 		return nil
 	}
@@ -233,13 +236,13 @@ func (h *SolarmanClientHandler) connect() error {
 }
 
 // Close implements the Connector interface.
-func (h *SolarmanClientHandler) Close() error {
+func (h *solarmanTransport) Close() error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.close()
 }
 
-func (h *SolarmanClientHandler) close() error {
+func (h *solarmanTransport) close() error {
 	if h.conn == nil {
 		return nil
 	}
@@ -250,7 +253,7 @@ func (h *SolarmanClientHandler) close() error {
 
 // Send implements the Transporter interface. It wraps the RTU request, performs
 // the exchange and returns the RTU response.
-func (h *SolarmanClientHandler) Send(aduRequest []byte) ([]byte, error) {
+func (h *solarmanTransport) Send(aduRequest []byte) ([]byte, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -286,7 +289,7 @@ func (h *SolarmanClientHandler) Send(aduRequest []byte) ([]byte, error) {
 }
 
 // exchange writes the request and reads exactly one framed response.
-func (h *SolarmanClientHandler) exchange(request []byte) ([]byte, error) {
+func (h *solarmanTransport) exchange(request []byte) ([]byte, error) {
 	if h.Timeout > 0 {
 		if err := h.conn.SetDeadline(time.Now().Add(h.Timeout)); err != nil {
 			return nil, err
