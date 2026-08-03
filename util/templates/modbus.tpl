@@ -13,6 +13,10 @@ rtu: true
 # Modbus TCP
 uri: {{ joinHostPort .host .port }}
 rtu: false
+{{- else if or (eq .modbus "solarman") .solarman }}
+# Solarman data logger
+uri: {{ joinHostPort .host .port }}
+serial: {{ .serial }}
 {{- else if or (eq .modbus "udp") .udp }}
 # Modbus UDP
 uri: {{ joinHostPort .host .port }}

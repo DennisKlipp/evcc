@@ -23,10 +23,12 @@ const (
 	ModbusChoiceRS485    = "rs485"
 	ModbusChoiceTCPIP    = "tcpip"
 	ModbusChoiceUDP      = "udp"
+	ModbusChoiceSolarman = "solarman"
 	ModbusKeyRS485Serial = "rs485serial"
 	ModbusKeyRS485TCPIP  = "rs485tcpip"
 	ModbusKeyTCPIP       = "tcpip"
 	ModbusKeyUDP         = "udp"
+	ModbusKeySolarman    = "solarman"
 
 	ModbusParamId       = "id"
 	ModbusParamDevice   = "device"
@@ -36,6 +38,7 @@ const (
 	ModbusParamHost     = "host"
 	ModbusParamPort     = "port"
 	ModbusParamRTU      = "rtu"
+	ModbusParamSerial   = "serial"
 	ModbusParamDelay    = "delay"
 	ModbusParamTimeout  = "timeout"
 )
@@ -47,17 +50,18 @@ const (
 )
 
 var (
-	ValidModbusChoices = []string{ModbusChoiceRS485, ModbusChoiceTCPIP, ModbusChoiceUDP}
+	ValidModbusChoices = []string{ModbusChoiceRS485, ModbusChoiceTCPIP, ModbusChoiceUDP, ModbusChoiceSolarman}
 
 	// ModbusParams contains all field names used by modbus templates
 	ModbusParams = []string{
 		ModbusParamId, ModbusParamDevice, ModbusParamBaudrate, ModbusParamComset,
 		ModbusParamURI, ModbusParamHost, ModbusParamPort, ModbusParamRTU,
-		ModbusParamDelay, ModbusParamTimeout,
+		ModbusParamSerial, ModbusParamDelay, ModbusParamTimeout,
 	}
 
 	ModbusConnectionTypes = []string{
 		ModbusKeyTCPIP, ModbusKeyUDP, ModbusKeyRS485Serial, ModbusKeyRS485TCPIP,
+		ModbusKeySolarman,
 	}
 )
 

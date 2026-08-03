@@ -840,6 +840,7 @@ modbus:
     rs485: ["rs485serial", "rs485tcpip"]
     tcpip: ["tcpip"]
     udp: ["udp"]
+    solarman: ["solarman"]
   definitions:
     - name: id
       description:
@@ -878,6 +879,16 @@ modbus:
         en: Port
       default: 502
       type: int
+    - name: serial
+      description:
+        de: Logger-Seriennummer
+        en: Logger serial number
+      help:
+        de: Seriennummer des Solarman-Datenloggers, steht auf dem Gerät und in dessen Weboberfläche
+        en: Serial number of the Solarman data logger, printed on the device and shown in its web interface
+      required: true
+      type: int
+      example: 1234567890
     - name: delay
       help:
         de: Wartezeit vor jedem Registerzugriff
@@ -925,6 +936,17 @@ modbus:
         - name: host
         - name: port
           default: 502
+        - name: delay
+        - name: timeout
+    solarman:
+      description:
+        generic: Solarman Logger
+      params:
+        - name: id
+        - name: host
+        - name: port
+          default: 8899
+        - name: serial
         - name: delay
         - name: timeout
 

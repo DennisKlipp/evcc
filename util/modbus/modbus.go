@@ -19,6 +19,7 @@ const (
 	Rtu
 	Ascii
 	Udp
+	Solarman
 
 	CoilOn uint16 = 0xFF00
 )
@@ -57,6 +58,7 @@ type Settings struct {
 	Baudrate  int           `json:"baudrate,omitempty" yaml:",omitempty"`
 	UDP       bool          `json:"udp,omitempty" yaml:",omitempty"`
 	RTU       *bool         `json:"rtu,omitempty" yaml:",omitempty"`
+	Serial    uint32        `json:"serial,omitempty" yaml:",omitempty"` // Solarman logger serial
 	Delay     time.Duration `json:"delay,omitempty" yaml:",omitempty"`
 	Timeout   time.Duration `json:"timeout,omitempty" yaml:",omitempty"`
 }
@@ -69,7 +71,7 @@ func (s Settings) Connection(ctx context.Context, proto ...Protocol) (*Connectio
 		p = proto[0]
 	}
 
-	conn, err := NewConnection(ctx, s.URI, s.Device, s.Comset, s.Baudrate, p, s.ID)
+	conn, err := newConnection(ctx, p, s)
 	if err != nil {
 		return nil, err
 	}
@@ -83,6 +85,8 @@ func (s Settings) Connection(ctx context.Context, proto ...Protocol) (*Connectio
 // Protocol identifies the wire format from the RTU setting
 func (s Settings) Protocol() Protocol {
 	switch {
+	case s.Serial != 0:
+		return Solarman
 	case s.UDP:
 		return Udp
 	case s.Device != "" || s.RTU != nil && *s.RTU:
@@ -162,19 +166,27 @@ func registeredConnection(ctx context.Context, key string, proto Protocol, newCo
 
 // NewConnection creates physical modbus device from config
 func NewConnection(ctx context.Context, uri, device, comset string, baudrate int, proto Protocol, slaveID uint8) (*Connection, error) {
-	conn, err := physicalConnection(ctx, proto, Settings{
+	return newConnection(ctx, proto, Settings{
+		ID:       slaveID,
 		URI:      uri,
 		Device:   device,
 		Comset:   comset,
 		Baudrate: baudrate,
 	})
+}
+
+// newConnection creates a physical modbus device from the full settings. Unlike
+// NewConnection it retains settings that have no positional parameter, e.g. the
+// Solarman logger serial.
+func newConnection(ctx context.Context, proto Protocol, cfg Settings) (*Connection, error) {
+	conn, err := physicalConnection(ctx, proto, cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	res := &Connection{
-		slaveID:    slaveID,
-		Connection: conn.Clone(slaveID),
+		slaveID:    cfg.ID,
+		Connection: conn.Clone(cfg.ID),
 		logger:     conn.logger,
 	}
 
@@ -205,6 +217,14 @@ func physicalConnection(ctx context.Context, proto Protocol, cfg Settings) (*met
 		default:
 			return registeredConnection(ctx, cfg.Device, proto, meters.NewRTU(cfg.Device, cfg.Baudrate, cfg.Comset))
 		}
+	}
+
+	if proto == Solarman {
+		if cfg.Serial == 0 {
+			return nil, errors.New("invalid modbus configuration: solarman requires the logger serial")
+		}
+		conn := NewSolarman(cfg.URI, cfg.Serial)
+		return registeredConnection(ctx, conn.String(), proto, conn)
 	}
 
 	uri := util.DefaultPort(cfg.URI, 502)
