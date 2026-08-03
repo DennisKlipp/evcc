@@ -26,9 +26,36 @@ requirements:
       Disabling writes the minimum charge power instead of 0 W. Writing 0 puts
       some firmware versions into a fault state.
 params:
-  - name: modbus
-    choice: ["solarman"]
-    id: 3
+  - name: host
+    description:
+      de: IP-Adresse der Wallbox
+      en: IP address of the charger
+    required: true
+    example: 192.168.0.10
+  - name: port
+    description:
+      de: Port
+      en: Port
+    type: int
+    default: 8899
+    advanced: true
+  - name: serial
+    description:
+      de: Logger-Seriennummer
+      en: Logger serial number
+    help:
+      de: Steht in der Weboberfläche der Wallbox unter "Geräteinformationen"
+      en: Shown in the charger web interface under "device information"
+    type: int
+    required: true
+    example: 1234567890
+  - name: id
+    description:
+      de: Modbus ID
+      en: Modbus ID
+    type: int
+    default: 3
+    advanced: true
   - name: phases
     description:
       de: Angeschlossene Phasen
@@ -65,7 +92,9 @@ render: |
         type: int
         config:
           source: modbus
-          {{- include "modbus" . | indent 8 }}
+          uri: {{ joinHostPort .host .port }}
+          serial: {{ .serial }}
+          id: {{ .id }}
           register:
             address: 57 # EV status word
             type: holding
@@ -74,7 +103,9 @@ render: |
         type: int
         config:
           source: modbus
-          {{- include "modbus" . | indent 8 }}
+          uri: {{ joinHostPort .host .port }}
+          serial: {{ .serial }}
+          id: {{ .id }}
           register:
             address: 38 # power L1
             type: holding
@@ -92,21 +123,27 @@ render: |
     source: calc
     add:
     - source: modbus
-      {{- include "modbus" . | indent 4 }}
+      uri: {{ joinHostPort .host .port }}
+      serial: {{ .serial }}
+      id: {{ .id }}
       register:
         address: 38 # power L1
         type: holding
         decode: uint16
       scale: 10
     - source: modbus
-      {{- include "modbus" . | indent 4 }}
+      uri: {{ joinHostPort .host .port }}
+      serial: {{ .serial }}
+      id: {{ .id }}
       register:
         address: 39 # power L2
         type: holding
         decode: uint16
       scale: 10
     - source: modbus
-      {{- include "modbus" . | indent 4 }}
+      uri: {{ joinHostPort .host .port }}
+      serial: {{ .serial }}
+      id: {{ .id }}
       register:
         address: 40 # power L3
         type: holding
@@ -119,7 +156,9 @@ render: |
         type: int
         config:
           source: modbus
-          {{- include "modbus" . | indent 8 }}
+          uri: {{ joinHostPort .host .port }}
+          serial: {{ .serial }}
+          id: {{ .id }}
           register:
             address: 18 # charge power setpoint
             type: holding
@@ -135,7 +174,9 @@ render: |
         value: {{ mul .phases .voltage 6 }}
         set:
           source: modbus
-          {{- include "modbus" . | indent 8 }}
+          uri: {{ joinHostPort .host .port }}
+          serial: {{ .serial }}
+          id: {{ .id }}
           register:
             address: 18 # charge power setpoint
             type: writesingle
@@ -148,7 +189,9 @@ render: |
         value: {{ .minpower }}
         set:
           source: modbus
-          {{- include "modbus" . | indent 8 }}
+          uri: {{ joinHostPort .host .port }}
+          serial: {{ .serial }}
+          id: {{ .id }}
           register:
             address: 18 # charge power setpoint
             type: writesingle
@@ -166,7 +209,9 @@ render: |
         type: int
         config:
           source: modbus
-          {{- include "modbus" . | indent 8 }}
+          uri: {{ joinHostPort .host .port }}
+          serial: {{ .serial }}
+          id: {{ .id }}
           register:
             address: 18 # charge power setpoint
             type: writesingle
