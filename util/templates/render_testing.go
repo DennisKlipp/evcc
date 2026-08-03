@@ -87,6 +87,8 @@ func TestClass(t *testing.T, class Class, instantiate func(t *testing.T, values 
 				values[ModbusKeyTCPIP] = true
 			} else if slices.Contains(modbusChoices, ModbusChoiceUDP) {
 				values[ModbusKeyUDP] = true
+			} else if slices.Contains(modbusChoices, ModbusChoiceSolarman) {
+				values[ModbusKeySolarman] = true
 			} else {
 				values[ModbusKeyRS485TCPIP] = true
 			}

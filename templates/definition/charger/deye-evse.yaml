@@ -1,0 +1,173 @@
+template: deye-evse
+products:
+  - brand: Deye
+    description:
+      generic: SUN-EVSE11K01/22K01
+requirements:
+  description:
+    de: |
+      Die Wallbox wird über ihren eingebauten Solarman-Logger angesprochen.
+      Benötigt werden die IP-Adresse der Wallbox und die Seriennummer des Loggers.
+      Beides steht in der Weboberfläche der Wallbox unter "Geräteinformationen".
+
+      Die Wallbox kennt keine Stromvorgabe, sondern nur eine Ladeleistung. evcc
+      rechnet die Stromvorgabe anhand von Phasenzahl und Netzspannung um.
+
+      Zum Abschalten wird die kleinste Ladeleistung gesetzt, nicht 0 W. Das Schreiben
+      einer 0 löst in manchen Firmwareständen einen Fehlerzustand aus.
+    en: |
+      The charger is accessed through its built-in Solarman data logger. The IP
+      address of the charger and the serial number of the logger are required.
+      Both are shown in the charger's web interface under "device information".
+
+      The charger has no current setting, only a charge power. evcc converts the
+      current limit using the number of phases and the grid voltage.
+
+      Disabling writes the minimum charge power instead of 0 W. Writing 0 puts
+      some firmware versions into a fault state.
+params:
+  - name: modbus
+    choice: ["solarman"]
+    id: 3
+  - name: phases
+    description:
+      de: Angeschlossene Phasen
+      en: Connected phases
+    type: int
+    default: 3
+    required: true
+  - name: voltage
+    description:
+      de: Netzspannung
+      en: Grid voltage
+    type: int
+    default: 230
+    advanced: true
+  - name: minpower
+    description:
+      de: Kleinste Ladeleistung
+      en: Minimum charge power
+    help:
+      de: Wird beim Abschalten geschrieben. Unterhalb dieses Werts lädt die Wallbox nicht.
+      en: Written when disabling. The charger does not charge below this value.
+    type: int
+    unit: W
+    default: 1000
+    advanced: true
+render: |
+  type: custom
+  # vehicle state from the status word combined with the charge power:
+  # 0x01 = idle, 0x20 = vehicle connected, charging is derived from power > 0
+  status:
+    source: go
+    in:
+      - name: state
+        type: int
+        config:
+          source: modbus
+          {{- include "modbus" . | indent 8 }}
+          register:
+            address: 57 # EV status word
+            type: holding
+            decode: uint16
+      - name: power
+        type: int
+        config:
+          source: modbus
+          {{- include "modbus" . | indent 8 }}
+          register:
+            address: 38 # power L1
+            type: holding
+            decode: uint16
+    script: |
+      res := "A"
+      if state & 0x7f == 0x20 {
+        res = "B"
+        if power > 0 {
+          res = "C"
+        }
+      }
+      res
+  power:
+    source: calc
+    add:
+    - source: modbus
+      {{- include "modbus" . | indent 4 }}
+      register:
+        address: 38 # power L1
+        type: holding
+        decode: uint16
+      scale: 10
+    - source: modbus
+      {{- include "modbus" . | indent 4 }}
+      register:
+        address: 39 # power L2
+        type: holding
+        decode: uint16
+      scale: 10
+    - source: modbus
+      {{- include "modbus" . | indent 4 }}
+      register:
+        address: 40 # power L3
+        type: holding
+        decode: uint16
+      scale: 10
+  enabled: # disabled while the setpoint is at the minimum charge power
+    source: go
+    in:
+      - name: setpoint
+        type: int
+        config:
+          source: modbus
+          {{- include "modbus" . | indent 8 }}
+          register:
+            address: 18 # charge power setpoint
+            type: holding
+            decode: uint16
+    script: setpoint > {{ .minpower }}
+  enable:
+    source: ifelse
+    if: # enable: start at the minimum current, maxcurrent applies the real limit
+      source: convert
+      convert: bool2int
+      set:
+        source: const
+        value: {{ mul .phases .voltage 6 }}
+        set:
+          source: modbus
+          {{- include "modbus" . | indent 8 }}
+          register:
+            address: 18 # charge power setpoint
+            type: writesingle
+            decode: uint16
+    else: # disable: the charger does not charge at the minimum power
+      source: convert
+      convert: bool2int
+      set:
+        source: const
+        value: {{ .minpower }}
+        set:
+          source: modbus
+          {{- include "modbus" . | indent 8 }}
+          register:
+            address: 18 # charge power setpoint
+            type: writesingle
+            decode: uint16
+  maxcurrent: # the charger takes watts, not amps
+    source: go
+    script: |
+      watt := maxcurrent * {{ .voltage }} * {{ .phases }}
+      if watt < {{ .minpower }} {
+        watt = {{ .minpower }}
+      }
+      watt
+    out:
+      - name: watt
+        type: int
+        config:
+          source: modbus
+          {{- include "modbus" . | indent 8 }}
+          register:
+            address: 18 # charge power setpoint
+            type: writesingle
+            decode: uint16
