@@ -164,6 +164,8 @@ render: |
             type: holding
             decode: uint16
     script: setpoint > {{ .minpower }}
+  # the device ignores write single (fn 6) and only answers write multiple (fn 16),
+  # same as the Deye inverters
   enable:
     source: ifelse
     if: # enable: start at the minimum current, maxcurrent applies the real limit
@@ -179,7 +181,7 @@ render: |
           id: {{ .id }}
           register:
             address: 18 # charge power setpoint
-            type: writesingle
+            type: writemultiple
             decode: uint16
     else: # disable: the charger does not charge at the minimum power
       source: convert
@@ -194,7 +196,7 @@ render: |
           id: {{ .id }}
           register:
             address: 18 # charge power setpoint
-            type: writesingle
+            type: writemultiple
             decode: uint16
   maxcurrent: # the charger takes watts, not amps
     source: go
@@ -214,5 +216,5 @@ render: |
           id: {{ .id }}
           register:
             address: 18 # charge power setpoint
-            type: writesingle
+            type: writemultiple
             decode: uint16
