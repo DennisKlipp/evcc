@@ -42,6 +42,9 @@ const (
 	solarmanRespHeader   = 14     // response payload header before the RTU frame
 	solarmanEnvelopeLen  = 13     // start + len + control + seq + serial + checksum + end
 
+	// a late answer may still be in the socket, skip at most this many
+	solarmanMaxStaleFrames = 4
+
 	rtuMinSize = 4
 	rtuMaxSize = 256
 )
@@ -296,10 +299,37 @@ func (h *solarmanTransport) exchange(request []byte) ([]byte, error) {
 		}
 	}
 
+	h.drain()
+
 	if _, err := h.conn.Write(request); err != nil {
 		return nil, err
 	}
 
+	// the logger echoes the low byte of the request sequence. A late answer of a
+	// previous request would otherwise be paired with this one, which surfaces as
+	// a function code mismatch, so skip frames until the sequence matches.
+	want := request[5]
+
+	for range solarmanMaxStaleFrames {
+		frame, err := h.readFrame()
+		if err != nil {
+			return nil, err
+		}
+
+		if frame[5] == want {
+			return frame, nil
+		}
+
+		if h.Logger != nil {
+			h.Logger.Printf("solarman: skipping stale frame, sequence 0x%02X want 0x%02X", frame[5], want)
+		}
+	}
+
+	return nil, errors.New("solarman: no answer with matching sequence")
+}
+
+// readFrame reads exactly one enveloped frame.
+func (h *solarmanTransport) readFrame() ([]byte, error) {
 	// header carries the payload length, so read it first
 	header := make([]byte, 11)
 	if _, err := io.ReadFull(h.conn, header); err != nil {
@@ -320,6 +350,28 @@ func (h *solarmanTransport) exchange(request []byte) ([]byte, error) {
 	}
 
 	return append(header, rest...), nil
+}
+
+// drain discards anything left over from an earlier exchange.
+func (h *solarmanTransport) drain() {
+	if err := h.conn.SetReadDeadline(time.Now().Add(20 * time.Millisecond)); err != nil {
+		return
+	}
+
+	buf := make([]byte, 512)
+	for {
+		n, err := h.conn.Read(buf)
+		if err != nil || n == 0 {
+			break
+		}
+		if h.Logger != nil {
+			h.Logger.Printf("solarman: discarded % x", buf[:n])
+		}
+	}
+
+	if h.Timeout > 0 {
+		_ = h.conn.SetDeadline(time.Now().Add(h.Timeout))
+	}
 }
 
 // SolarmanConnection is a meters.Connection using a Solarman data logger.
