@@ -173,22 +173,14 @@ render: |
   # same as the Deye inverters
   enable:
     source: ifelse
-    if: # enable: start at the minimum current, maxcurrent applies the real limit
+    if: # enabling writes nothing: evcc sets the current limit first, which is the
+        # same register, so writing here would immediately overwrite it again
       source: convert
       convert: bool2int
       set:
-        source: const
-        value: {{ mul .phases .voltage 6 }}
-        set:
-          source: modbus
-          uri: {{ joinHostPort .host .port }}
-          serial: {{ .serial }}
-          id: {{ .id }}
-          register:
-            address: 18 # charge power setpoint
-            type: writemultiple
-            decode: uint16
-    else: # disable: the charger does not charge at the minimum power
+        source: sleep
+        duration: 0s
+    else: # disabling drops the limit below what the charger acts on
       source: convert
       convert: bool2int
       set:
