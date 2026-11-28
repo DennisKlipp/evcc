@@ -19,8 +19,12 @@ type identity struct {
 	vendor, brand, model, serial string
 }
 
+func deviceBrand() string {
+	return util.Getenv("EEBUS_BRAND", BrandName)
+}
+
 func deviceIdentity(shipID string) identity {
-	brand := util.Getenv("EEBUS_BRAND", BrandName)
+	brand := deviceBrand()
 	return identity{
 		vendor: util.Getenv("EEBUS_VENDOR", brand),
 		brand:  brand,

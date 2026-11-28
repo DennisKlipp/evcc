@@ -32,6 +32,7 @@ func TestDeviceIdentity(t *testing.T) {
 				t.Setenv(key, tc.env[key])
 			}
 			assert.Equal(t, tc.want, deviceIdentity("EVCC-1234"))
+			assert.Equal(t, tc.want.brand, deviceBrand())
 		})
 	}
 }
